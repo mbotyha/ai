@@ -20,13 +20,13 @@ ai-cli doctor    # which browser chatgpt-image would use here (local family / br
 AI-driven image and video work: ChatGPT automation, face restoration, face redaction, video background removal.
 
 ### `ai`
-One entry point for the toolbox: `ai <tool> <chat name>` opens (or resumes) a named chat with that AI, `-p` asks a one-shot question, `local` runs one of the CPU tools of this repo. v0 of the AI router: the tool is picked by hand; routing decisions move to Laya later.
+One entry point for the toolbox: `ai <tool> --name <chat name>` opens (or resumes) a named chat with that AI, `-p` asks a one-shot question, `local` runs one of the CPU tools of this repo. v0 of the AI router: the tool is picked by hand; routing decisions move to Laya later.
 
 ```
-ai c test-name                        # claude chat "test-name" of this folder: resumed if it exists, else new
+ai c --name test-name                 # claude chat "test-name" of this folder: resumed if it exists, else new
 ai c                                  # new unnamed claude chat
-ai c --w <workspace> test-name        # claude chat "test-name" of another workspace, from any folder
-ai g test-name                        # resume the grok chat titled "test-name" in this folder
+ai c --w <workspace> --n test-name    # claude chat "test-name" of another workspace, from any folder
+ai g --name test-name                 # resume the grok chat titled "test-name" in this folder
 ai c -p "summarize this repo"         # Claude Code, headless (claude -p)
 ai g -p "summarize this repo"         # Grok, headless (grok -p)
 ai d "explain MoE in 3 lines"         # DeepSeek via NVIDIA's free API (prompt only)
@@ -40,18 +40,18 @@ ai resume                             # reopen the chats a shutdown killed, see 
 | Flag | Required | Value | Description |
 |---|---|---|---|
 | `<tool>` | yes | `claude` / `grok` / `deepseek` / `ats` / `local` / `resume` | who runs it; `resume` passes its flags to [`ai-resume`](#ai-resume) |
-| `[chat name...]` | no | string | `claude` / `grok`: the chat to open or resume, the rest of the arguments joined with spaces; none = new unnamed chat |
+| `--name <chat name>` | no | string | `claude` / `grok`: the chat to open or resume, one argument (quote a name with spaces); none = new unnamed chat; shortest form `--n`; not with `--prompt` |
 | `--workspace <folder>` | no | a workspace, any unique prefix | `claude` / `grok`: run in that workspace (the folder holding this repo or one next to it) instead of the current folder; shortest form `--w` |
 | `-p` / `--prompt <prompt...>` | no | string | `claude` / `grok`: headless one-shot answer instead of a chat; `deepseek` always works this way, `-p` optional |
 | `<command> [args...]` | `local` only | a command below + its own args | passed through unchanged, so `ai l <command> --help` works |
 | `--help` / `-h` | no | — | print usage and exit; also `ai <tool> --help`, and `ai l --help` lists the local commands |
 
 - **Abbreviations**: every tool and local command accepts its shortest unique prefix: one letter when it is enough (`c`, `g`, `d`, `l`, `u`), more when names share a start (`ai l sl` = `slideshow`, `ai l gitp` = `gitpush`; two names `ab...` and `ac...` take `ab` and `ac`). An exact name always wins (`instagram-download` vs `instagram-download-batch`). Ambiguous or unknown names print the candidates. New tools and commands must keep `c`, `g`, `d`, `l` unique.
-- **Flags**: long names only, each accepting its shortest unique prefix like the tools (`--w` = `--workspace`, `--p` = `--prompt`), before the chat name; `-p` / `--prompt` comes last, every word after it is the prompt. No new one-letter flags: `-p` and `-h` exist only because `claude`, `grok` and every CLI use them. A new flag must keep `--w` and `--p` unique.
-- `ai c <name>` runs `gitchat --name <name>`: chats are per folder, matched by the claude session title.
-- Started in `~` (terminals opened from the desktop UI), `ai c` and `ai c <name>` open a new chat in the project folder instead (`AI_CHAT_HOME`, default: the folder holding this repo), where the project's `.claude/settings.json` loads with the agent's narrow `gh pr merge` rule (auto mode does not apply broad user allows such as `Bash(*)`, while a narrow allow like that one is applied before its classifier). `ai c <name>` resumes a chat that already exists in `~`, in `~`; otherwise they resume or create it in `AI_CHAT_HOME`. Unnamed `ai c` from `~` always starts in `AI_CHAT_HOME`. Headless `ai c -p` keeps the current folder. `--workspace` overrides all of this: the chat is the one of that workspace (chats are per folder), resumed or created there.
+- **Flags**: long names only, each accepting its shortest unique prefix like the tools (`--w` = `--workspace`, `--n` = `--name`, `--p` = `--prompt`); `-p` / `--prompt` comes last, every word after it is the prompt. Free words outside `--prompt` are an error for `claude` / `grok` (the name goes in `--name`). No new one-letter flags: `-p` and `-h` exist only because `claude`, `grok` and every CLI use them. A new flag must keep `--w`, `--n` and `--p` unique.
+- `ai c --name <name>` runs `gitchat --name <name>`: chats are per folder, matched by the claude session title.
+- Started in `~` (terminals opened from the desktop UI), `ai c` and `ai c --name <name>` open a new chat in the project folder instead (`AI_CHAT_HOME`, default: the folder holding this repo), where the project's `.claude/settings.json` loads with the agent's narrow `gh pr merge` rule (auto mode does not apply broad user allows such as `Bash(*)`, while a narrow allow like that one is applied before its classifier). `ai c --name <name>` resumes a chat that already exists in `~`, in `~`; otherwise they resume or create it in `AI_CHAT_HOME`. Unnamed `ai c` from `~` always starts in `AI_CHAT_HOME`. Headless `ai c -p` keeps the current folder. `--workspace` overrides all of this: the chat is the one of that workspace (chats are per folder), resumed or created there.
 - A session started in `~`, or in a folder whose `.claude/settings.json` (or the one of its git root) lacks the merge rule, prints a warning at start (`workspace-check` hook, registered by `install.sh`): the workspace's agent permissions are not loaded there. The warning, with the commands to fix it, shows on screen only; the agent is told just that gated actions need the owner's OK.
-- `ai g <name>` runs `grok -r <name>` (title match in this folder, case-insensitive). Grok's CLI cannot title a new chat, so an unknown name fails: open it with `ai g` and give it the title inside grok.
+- `ai g --name <name>` runs `grok -r <name>` (title match in this folder, case-insensitive). Grok's CLI cannot title a new chat, so an unknown name fails: open it with `ai g` and give it the title inside grok.
 - `ai local` reads the command list from `package.json` `bin`, so new commands show up without touching `ai`. The standalone names (`upscale`, `gitpush`, ...) keep working.
 - `claude` and `grok` run the installed CLIs, using their own login. Output, exit code and signal are theirs; with `-p` piped stdin reaches them (`git diff | ai c -p "review this"`).
 - `deepseek` calls `https://integrate.api.nvidia.com/v1` (OpenAI-compatible) through the Vercel AI SDK and streams the answer. Needs `NVIDIA_API_KEY` from the shell, else from this repo's `.env` (only the `NVIDIA_API_KEY`, `AI_DEEPSEEK_MODEL` and `AI_TIMEOUT_MS` keys are read from it, so other keys in that file never reach the spawned agents). Model from `AI_DEEPSEEK_MODEL`, default `deepseek-ai/deepseek-v4.1-flash`. Free tier, for trials only: ~40 requests/min, can queue for minutes when busy, so a call with no answer gives up after `AI_TIMEOUT_MS` (default 5 min). If the model leaves the answer empty and puts it all in its reasoning, the reasoning is printed. Needs Node >= 22.12 (the AI SDK is ESM-only).

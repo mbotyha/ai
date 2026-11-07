@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ai: one entry point for the toolbox. `ai <tool> <chat name>` opens (or resumes) a named chat;
+// ai: one entry point for the toolbox. `ai <tool> --name <chat name>` opens (or resumes) a named chat;
 // `ats` scores a CV against a job description; `local` runs the CPU tools of this repo. Every name accepts its shortest unique prefix (c, g, d, l, u, ...).
 // v0 of the AI router: the target is picked by hand; routing decisions move to Laya later.
 const fs = require('fs');
@@ -245,7 +245,7 @@ const main = async () => {
     if (target === 'deepseek') return runDeepSeek(text);
     return run(target, ['-p', text], ws);
   }
-  if (words.length) fail(`unexpected "${words.join(' ')}": name the chat with --name <name>`);
+  if (words.length) fail(`unexpected "${words.join(' ')}": ${name ? '--name takes one argument, quote a name with spaces' : 'name the chat with --name <name>'}`);
   // Same rule as gitchat.sh: a new claude chat started in ~ opens in the project folder;
   // checked only for that case, and an unresolvable cwd or home just keeps the current folder
   const inHome = () => { try { return fs.realpathSync(process.cwd()) === fs.realpathSync(os.homedir()) } catch { return false } };

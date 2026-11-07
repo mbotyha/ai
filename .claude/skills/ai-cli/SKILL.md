@@ -7,10 +7,10 @@ description: Design rules of the `ai` command of ai-cli — `ai <tool> [--name <
 
 The shape is fixed: `ai <tool> [--workspace <folder>] [--name <chat name> | -p <prompt>]`, or `ai local <command>`.
 
-| Position | What | Rule |
+| Argument | What | Rule |
 |---|---|---|
 | 1 | tool: `claude`, `grok`, `deepseek` (for now), or `local` | the AI or the toolbox that runs it |
-| `--name` | chat name (AI tools) | the chat to open or resume in this folder, one argument; free words are an error for `claude` / `grok`, never a name nor a prompt |
+| `--name` | chat name (`claude` / `grok`) | the chat to open or resume in this folder, one argument; free words are an error for `claude` / `grok`, never a name nor a prompt |
 | 2+ | command + args (`local`) | passed through unchanged |
 | `-p` | one-shot prompt | the only way to send a headless prompt to `claude` / `grok`; `deepseek` has no chats yet, so its words are the prompt |
 

@@ -17,6 +17,6 @@ if [ "$real" != "$(cd "$HOME" && pwd -P)" ]; then
 fi
 link="$(cd "$(dirname "$(readlink -f "$0")")/../../.." && pwd)/os/scripts/link-project-settings.mjs"
 # the fix is the owner's: the model only learns the rule is missing, the commands go to the user's screen only
-jq -n --arg m "Agent permissions (the merge rule) are not loaded: $real has no .claude/settings.json with them. Reopen the chat with: ai c --w <workspace> --name <chat name>. To give $real its own: node $link $real" \
+jq -n --arg m "Agent permissions (the merge rule) are not loaded: $real has no .claude/settings.json with them. Reopen the chat with: ai c --w <workspace> [--name <chat name>]. To give $real its own: node $link $real" \
   --arg c "This session has no workspace agent permissions: merges and other gated actions need the owner's explicit OK in chat." \
   '{systemMessage: $m, hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $c}}'

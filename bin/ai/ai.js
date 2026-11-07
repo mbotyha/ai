@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ai: one entry point for the toolbox. `ai <tool> <chat name>` opens (or resumes) a named chat;
+// ai: one entry point for the toolbox. `ai <tool> --name <chat name>` opens (or resumes) a named chat;
 // `ats` scores a CV against a job description; `local` runs the CPU tools of this repo. Every name accepts its shortest unique prefix (c, g, d, l, u, ...).
 // v0 of the AI router: the target is picked by hand; routing decisions move to Laya later.
 const fs = require('fs');
@@ -11,15 +11,15 @@ const { spawn } = require('child_process');
 const REPO = path.join(__dirname, '..', '..');
 const HELP = ['-h', '--help'];
 
-const usage = `Usage: ai <tool> [--workspace <folder>] [chat name...]
+const usage = `Usage: ai <tool> [--workspace <folder>] [--name <chat name>]
        ai <tool> [--workspace <folder>] -p <prompt...>
        ai ats < input.json
        ai local <command> [args...]
 
 Tools (full name or any unique prefix):
-  claude     "ai c <name>" opens the claude chat <name> of this folder, resuming it if it exists;
+  claude     "ai c --name <name>" opens the claude chat <name> of this folder, resuming it if it exists;
              "ai c" alone opens a new unnamed chat; "ai c -p <prompt>" is headless (claude -p)
-  grok       "ai g <name>" resumes the grok chat titled <name> in this folder (grok -r);
+  grok       "ai g --name <name>" resumes the grok chat titled <name> in this folder (grok -r);
              "ai g" alone opens a new chat; "ai g -p <prompt>" is headless (grok -p)
   deepseek   DeepSeek through NVIDIA's free API (needs NVIDIA_API_KEY), prompt only, no chats yet:
              "ai d <prompt>" = "ai d -p <prompt>"
@@ -29,10 +29,11 @@ Tools (full name or any unique prefix):
              "ai l" alone lists them; "ai l <command> --help" for each one
   resume     reopen the chats a shutdown or crash killed, one terminal tab each; "ai r --help"
 
-Flags (claude and grok), before the chat name, long only and any unique prefix like the names; -p last:
+Flags (claude and grok), long only and any unique prefix like the names; -p last:
   --workspace <folder>   run in that workspace, a folder of ${path.dirname(path.dirname(REPO))},
-                         itself any unique prefix: "ai c --w fan <name>" runs in fantasia_lat
-  --prompt, -p           headless; -p and -h stay because claude and grok use them
+                         itself any unique prefix: "ai c --w fan --n <name>" runs in fantasia_lat
+  --name <chat name>     the chat to open or resume; quote a name with spaces
+  --prompt, -p           headless, not with --name; -p and -h stay because claude and grok use them
 
 Piped stdin reaches the headless calls: git diff | ai c -p "review this"
 
@@ -216,31 +217,35 @@ const main = async () => {
     process.exit(0);
   }
   if (target === 'ats') return runAts();
-  // leading flags, long names by unique prefix (--w, --p); -p comes last, everything after it is the prompt;
-  // the first word not starting with -- starts the name or prompt
+  // flags, long names by unique prefix (--w, --n, --p); -p comes last, everything after it is the prompt;
+  // for deepseek the first word not starting with -- starts the prompt
   let ws;
+  let name;
   let prompt = false;
   let words = rest;
   while (words[0]?.startsWith('-') && !prompt) {
     const [flag, ...more] = words;
     if (flag !== '-p' && !flag.startsWith('--')) {
-      if (/^-[a-z]$/i.test(flag)) fail(`no one-letter flag ${flag}: only -p and -h, else --workspace / --prompt`);
+      if (/^-[a-z]$/i.test(flag)) fail(`no one-letter flag ${flag}: only -p and -h, else --workspace / --name / --prompt`);
       break;
     }
-    const long = flag === '-p' ? 'prompt' : pick(flag.slice(2), ['workspace', 'prompt']);
+    const long = flag === '-p' ? 'prompt' : pick(flag.slice(2), ['workspace', 'name', 'prompt']);
     if (!long) process.exit(1);
     if (long === 'prompt') prompt = true;
-    else if (target === 'deepseek') fail('--workspace is for claude and grok');
-    else { ws = workspace(more[0]); more.shift(); }
+    else if (target === 'deepseek') fail(`--${long} is for claude and grok`);
+    else if (long === 'workspace') ws = workspace(more.shift());
+    else if (!more[0] || more[0].startsWith('-')) fail('--name needs a value');
+    else name = more.shift();
     words = more;
   }
   if (prompt || target === 'deepseek') {
+    if (name) fail('--name opens a chat, --prompt is headless: use one of them');
     const text = words.join(' ');
     if (!text) fail(`missing prompt\n\n${usage}`);
     if (target === 'deepseek') return runDeepSeek(text);
     return run(target, ['-p', text], ws);
   }
-  const name = words.join(' ');
+  if (words.length) fail(`unexpected "${words.join(' ')}": ${name ? '--name takes one argument, quote a name with spaces' : 'name the chat with --name <name>'}`);
   // Same rule as gitchat.sh: a new claude chat started in ~ opens in the project folder;
   // checked only for that case, and an unresolvable cwd or home just keeps the current folder
   const inHome = () => { try { return fs.realpathSync(process.cwd()) === fs.realpathSync(os.homedir()) } catch { return false } };

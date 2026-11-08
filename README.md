@@ -739,6 +739,37 @@ translate-text --input "Good morning, how are you?" --output IT
 - Needs `DEEPL_API_KEY` from the shell, else from this repo's `.env` (only that key is read from it). `deepl-node` picks the endpoint from the key: one ending in `:fx` (DeepL API Free) goes to `api-free.deepl.com`, any other to `api.deepl.com`. Quotas depend on the DeepL plan, see your DeepL account.
 - The text is sent to DeepL.
 
+## infra
+
+Short-lived servers: created for an event, destroyed after.
+
+### `jitsi-vultr`
+Creates a self-hosted Jitsi Meet server on Vultr and points a Cloudflare DNS record at it, or destroys both. The server installs Jitsi by itself on first boot (cloud-init runs `bin/infra/jitsi-install.sh`): docker-jitsi-meet, Let's Encrypt, hosts log in, guests join without an account once a host is in, lobby on.
+
+```
+jitsi-vultr up                                  # bitvero.mbotyha.com, Amsterdam, 4 vCPU / 8 GB
+REGION=mil PLAN=vhp-2c-4gb SUBDOMAIN=call jitsi-vultr up
+SNAPSHOT=1 jitsi-vultr down                     # snapshot, destroy, remove the DNS record
+```
+
+| Flag / env | Required | Value | Description |
+|---|---|---|---|
+| `up` / `down` | yes | — | create or destroy |
+| `VULTR_API_KEY` | yes | key | Vultr: Account → API Access |
+| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone DNS Edit on `ZONE` |
+| `ZONE` / `SUBDOMAIN` | no | domain / label | default `mbotyha.com` / `bitvero` |
+| `REGION` | no | Vultr region id | default `ams`; `fra`, `mil`, `sao`, ... |
+| `PLAN` | no | Vultr plan id | default `vhp-4c-8gb` (~30 people with video); `vhp-2c-4gb` for ~10 |
+| `LE_EMAIL` | no | email | Let's Encrypt notices, default `letsencrypt@agent.mbotyha.com` |
+| `SSH_KEY_FILE` | no | path | public key put on the server, default `~/.ssh/id_rsa.pub` |
+| `SNAPSHOT` | no | `1` | `down` only: snapshot before destroying |
+| `--help` / `-h` | no | — | print usage and exit |
+
+- The server label is `<SUBDOMAIN>-jitsi`: `up` refuses if it already exists, `down` finds it by label.
+- The install waits until the DNS record points at the server, then requests the certificate.
+- The host password is generated on the server, root-only: `ssh root@<ip> cat /root/jitsi-host-pass`. Install log: `/root/jitsi-install.log`.
+- Billing runs while the server exists, stopped or not: `down` after the event.
+
 ## Setup from scratch (to replicate on a VPS)
 
 1. **Node.js + npm** (via nvm, recommended):
@@ -902,6 +933,7 @@ ai-cli/
 │   ├── social/                     # instagram-*, tiktok-*, x-* downloaders
 │   ├── media/                      # image conversion, upscale, watermarks, video frames/blur/overlay/aspect ratio, slideshow
 │   ├── dev/                        # ai-resume, gitchat, gitpush, gitpool-landed, github-events, workspace-check, repo-split-branches, repo-join-branches, search-string, fixvscode, wsname
+│   ├── infra/                      # jitsi-vultr (+ jitsi-install.sh, run on the server by cloud-init)
 │   └── utils/                      # share-qr, translate-text
 ├── workers/github-events/          # Cloudflare Worker behind github-events
 ├── .claude/skills/ffmpeg-skill/    # vendored third-party skill (MIT), see "media"

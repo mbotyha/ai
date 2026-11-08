@@ -62,6 +62,9 @@ const AREAS = [
     ['fixvscode', 'Fix blank VS Code windows by clearing its GPU caches (desktop)'],
     ['wsname', 'Name a VS Code workspace and show it in the window title (desktop)'],
   ]],
+  ['infra', [
+    ['jitsi-vultr', 'Create (up) or destroy (down) a self-hosted Jitsi server on Vultr, DNS on Cloudflare'],
+  ]],
   ['utils', [
     ['share-qr', 'Print/save a QR code for arbitrary text'],
     ['translate-text', 'Translate a text with DeepL: translate-text --input "text" --output IT'],

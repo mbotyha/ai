@@ -763,6 +763,7 @@ SNAPSHOT=1 jitsi-vultr down                     # snapshot, destroy, remove the 
 | `LE_EMAIL` | no | email | Let's Encrypt notices, default `letsencrypt@agent.mbotyha.com` |
 | `SSH_KEY_FILE` | no | path | public key put on the server, default `~/.ssh/id_rsa.pub` |
 | `SNAPSHOT` | no | `1` | `down` only: snapshot before destroying |
+| `REPLACE_DNS` | no | `1` | `up` only: overwrite an existing A record (refused by default); `down` deletes the record only if it still points at the server |
 | `--help` / `-h` | no | — | print usage and exit |
 
 - The server label is `<SUBDOMAIN>-jitsi`: `up` refuses if it already exists, `down` finds it by label.

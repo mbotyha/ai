@@ -756,7 +756,7 @@ SNAPSHOT=1 jitsi-vultr down                     # snapshot, destroy, remove the 
 |---|---|---|---|
 | `up` / `down` | yes | — | create or destroy |
 | `VULTR_API_KEY` | yes | key | Vultr: Account → API Access |
-| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone DNS Edit on `ZONE` |
+| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on `ZONE` |
 | `ZONE` / `SUBDOMAIN` | no | domain / label | default `mbotyha.com` / `bitvero` |
 | `REGION` | no | Vultr region id | default `ams`; `fra`, `mil`, `sao`, ... |
 | `PLAN` | no | Vultr plan id | default `vhp-4c-8gb` (~30 people with video); `vhp-2c-4gb` for ~10 |

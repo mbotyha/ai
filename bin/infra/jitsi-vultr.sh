@@ -2,7 +2,7 @@
 # Ephemeral Jitsi on Vultr, one command each way.
 #   jitsi-vultr.sh up     create server + DNS, Jitsi installs itself via cloud-init (~5 min)
 #   jitsi-vultr.sh down   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
-# Env: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone DNS edit on the zone)
+# Env: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit on the zone)
 # Defaults below can be overridden from env, e.g. REGION=mil SUBDOMAIN=call ./jitsi-vultr.sh up
 set -euo pipefail
 
@@ -41,7 +41,7 @@ up() {
   user_data=$(cat <<EOF
 #cloud-config
 ssh_authorized_keys:
-  - $(cat "$SSH_KEY_FILE")
+  - $(jq -Rs 'rtrimstr("\n")' "$SSH_KEY_FILE")
 write_files:
   - path: /root/jitsi-install.sh
     permissions: '0755'
@@ -64,6 +64,7 @@ EOF
 down() {
   id=$(instance_id); [ -n "$id" ] || { echo "no $LABEL instance" >&2; exit 1; }
   ip=$(vultr "/instances/$id" | jq -r .instance.main_ip)
+  z=$(zone_id)   # before destroying, so a bad token stops here
   if [ "${SNAPSHOT:-0}" = 1 ]; then
     snap=$(vultr /snapshots -X POST -d "$(jq -n --arg i "$id" --arg d "$LABEL $(date +%F)" '{instance_id:$i, description:$d}')" | jq -r .snapshot.id)
     echo "snapshot $snap: waiting"
@@ -71,7 +72,7 @@ down() {
   fi
   vultr "/instances/$id" -X DELETE
   # Delete the record only if it still points at this server
-  z=$(zone_id); read -r d cur < <(dns_rec "$z") || true
+  read -r d cur < <(dns_rec "$z") || true
   if [ -n "${d:-}" ] && [ "$cur" = "$ip" ]; then cf "/zones/$z/dns_records/$d" -X DELETE >/dev/null; echo "$LABEL destroyed, $FQDN removed"
   else echo "$LABEL destroyed; $FQDN not removed (points at ${cur:-nothing}, not $ip)"; fi
 }

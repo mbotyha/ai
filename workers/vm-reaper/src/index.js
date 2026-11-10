@@ -1,6 +1,6 @@
 // Destroys short-lived servers whose time is up, with their DNS record, every 5 minutes (cron),
 // so they go away with the laptop off. A server opts in with two Vultr tags, set by
-// `jitsi-vultr create --duration`: "expires=<unix seconds>" and "fqdn=<host name>".
+// `jitsi create --duration`: "expires=<unix seconds>" and "fqdn=<host name>".
 // Secrets: VULTR_API_KEY (API access control must allow any IP), CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit).
 
 const call = (base, token) => async (path, init = {}) => {

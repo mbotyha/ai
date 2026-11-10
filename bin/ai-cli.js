@@ -63,7 +63,7 @@ const AREAS = [
     ['wsname', 'Name a VS Code workspace and show it in the window title (desktop)'],
   ]],
   ['infra', [
-    ['jitsi-vultr', 'Create (up) or destroy (down) a self-hosted Jitsi server on Vultr, DNS on Cloudflare'],
+    ['jitsi', 'Create or destroy a self-hosted Jitsi server (Vultr for now), DNS on Cloudflare'],
   ]],
   ['utils', [
     ['share-qr', 'Print/save a QR code for arbitrary text'],

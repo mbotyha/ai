@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Ephemeral Jitsi on Vultr, one command each way.
-#   jitsi-vultr create [--url https://bitvero.mbotyha.com] [--name "Foo bar"] [--duration 5h] [--provider vultr] [--region nl]
+# Ephemeral Jitsi (provider: Vultr for now), one command each way.
+#   jitsi create [--url https://bitvero.mbotyha.com] [--name "Foo bar"] [--duration 5h] [--provider vultr] [--region nl]
 #       server + DNS, Jitsi installs itself via cloud-init (~5 min); --duration: the vm-reaper Worker destroys it after that time
-#   jitsi-vultr destroy [--url ...]   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
+#   jitsi destroy [--url ...]   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
 # Keys: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit) from env or ~/.config/mbotyha/secrets.env
-# Other defaults from env, e.g. REGION=mil PLAN=vhp-2c-4gb jitsi-vultr create
+# Other defaults from env, e.g. REGION=mil PLAN=vhp-2c-4gb jitsi create
 set -euo pipefail
 
 SELF=$(readlink -f "$0")
@@ -96,7 +96,7 @@ EOF
   body=$(jq -n --arg r "$REGION" --arg p "$PLAN" --argjson o "$os_id" --arg l "$LABEL" --arg h "$SUBDOMAIN" --arg u "$(base64 -w0 <<<"$user_data")" --argjson t "$tags" \
     '{region:$r, plan:$p, os_id:$o, label:$l, hostname:$h, user_data:$u, tags:$t, backups:"disabled", enable_ipv6:false}')
   id=$(vultr /instances -X POST -d "$body" | jq -r .instance.id)
-  echo "instance $id: waiting for IP (if this fails, the server exists: jitsi-vultr down)"
+  echo "instance $id: waiting for IP (if this fails, the server exists: jitsi destroy)"
   until ip=$(vultr "/instances/$id" | jq -r '.instance.main_ip // empty') && is_ipv4 "$ip"; do sleep 5; done
   rec=$(jq -n --arg n "$SUBDOMAIN" --arg ip "$ip" '{type:"A", name:$n, content:$ip, ttl:60, proxied:false, comment:"ephemeral Jitsi on Vultr"}')
   if [ -n "${d:-}" ]; then cf "/zones/$z/dns_records/$d" -X PUT -d "$rec" >/dev/null; else cf "/zones/$z/dns_records" -X POST -d "$rec" >/dev/null; fi

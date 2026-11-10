@@ -743,13 +743,13 @@ translate-text --input "Good morning, how are you?" --output IT
 
 Short-lived servers: created for an event, destroyed after.
 
-### `jitsi-vultr`
+### `jitsi`
 Creates a self-hosted Jitsi Meet server on Vultr and points a Cloudflare DNS record at it, or destroys both. The server installs Jitsi by itself on first boot (cloud-init runs `bin/infra/jitsi-install.sh`): docker-jitsi-meet, Let's Encrypt, hosts log in, guests join without an account once a host is in, lobby on.
 
 ```
-jitsi-vultr create --url https://bitvero.mbotyha.com --name "Foo bar baz" --duration 5h
-PLAN=vhp-2c-4gb jitsi-vultr create --url https://call.mbotyha.com --region br
-SNAPSHOT=1 jitsi-vultr destroy --url https://bitvero.mbotyha.com   # snapshot, destroy, remove the DNS record
+jitsi create --url https://bitvero.mbotyha.com --name "Foo bar baz" --duration 5h
+PLAN=vhp-2c-4gb jitsi create --url https://call.mbotyha.com --region br
+SNAPSHOT=1 jitsi destroy --url https://bitvero.mbotyha.com   # snapshot, destroy, remove the DNS record
 ```
 
 | Flag / env | Required | Value | Description |
@@ -947,7 +947,7 @@ ai-cli/
 │   ├── social/                     # instagram-*, tiktok-*, x-* downloaders
 │   ├── media/                      # image conversion, upscale, watermarks, video frames/blur/overlay/aspect ratio, slideshow
 │   ├── dev/                        # ai-resume, gitchat, gitpush, gitpool-landed, github-events, workspace-check, repo-split-branches, repo-join-branches, search-string, fixvscode, wsname
-│   ├── infra/                      # jitsi-vultr (+ jitsi-install.sh, run on the server by cloud-init)
+│   ├── infra/                      # jitsi (+ jitsi-install.sh, run on the server by cloud-init)
 │   └── utils/                      # share-qr, translate-text
 ├── workers/github-events/          # Cloudflare Worker behind github-events
 ├── .claude/skills/ffmpeg-skill/    # vendored third-party skill (MIT), see "media"

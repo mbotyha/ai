@@ -1,15 +1,44 @@
 #!/usr/bin/env bash
 # Ephemeral Jitsi on Vultr, one command each way.
-#   jitsi-vultr.sh up     create server + DNS, Jitsi installs itself via cloud-init (~5 min)
-#   jitsi-vultr.sh down   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
-# Env: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit on the zone)
-# Defaults below can be overridden from env, e.g. REGION=mil SUBDOMAIN=call ./jitsi-vultr.sh up
+#   jitsi-vultr create [--url https://bitvero.mbotyha.com] [--name "Foo bar"] [--duration 5h] [--provider vultr] [--region nl]
+#       server + DNS, Jitsi installs itself via cloud-init (~5 min); --duration destroys it after that time
+#   jitsi-vultr destroy [--url ...]   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
+# Keys: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit) from env or ~/.config/mbotyha/secrets.env
+# Other defaults from env, e.g. REGION=mil PLAN=vhp-2c-4gb jitsi-vultr create
 set -euo pipefail
 
-[[ "${1:-}" =~ ^(-h|--help)$ ]] || : "${VULTR_API_KEY:?}" "${CLOUDFLARE_API_TOKEN:?}"
+SELF=$(readlink -f "$0")
+usage() { sed -n 2,7p "$SELF" | sed "s/^# \{0,1\}//"; }
+cmd=${1:-}; shift || true
+case "$cmd" in up) cmd=create ;; down) cmd=destroy ;; create|destroy) ;; -h|--help|help) usage; exit ;; *) usage >&2; exit 1 ;; esac
+URL="" NAME="" DURATION="" PROVIDER=vultr
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) URL=$2; shift 2 ;;
+    --name) NAME=$2; shift 2 ;;
+    --duration) DURATION=$2; shift 2 ;;
+    --provider) PROVIDER=$2; shift 2 ;;
+    --region) REGION=$2; shift 2 ;;
+    -h|--help) usage; exit ;;
+    *) echo "unknown option $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+# ponytail: one provider for now; others become a case on $PROVIDER around vultr()/up()/down()
+[ "$PROVIDER" = vultr ] || { echo "provider '$PROVIDER' not supported yet (only vultr)" >&2; exit 1; }
+
+SECRETS=${SECRETS:-$HOME/.config/mbotyha/secrets.env}
+# shellcheck disable=SC1090
+[ -n "${VULTR_API_KEY:-}" ] || [ ! -f "$SECRETS" ] || . "$SECRETS"
+: "${VULTR_API_KEY:?missing, set it or put it in $SECRETS}" "${CLOUDFLARE_API_TOKEN:?missing, set it or put it in $SECRETS}"
+
+# --url https://sub.zone.tld wins over SUBDOMAIN/ZONE
+if [ -n "$URL" ]; then host=${URL#*://}; host=${host%%/*}; SUBDOMAIN=${host%%.*}; ZONE=${host#*.}; fi
 ZONE=${ZONE:-mbotyha.com}
 SUBDOMAIN=${SUBDOMAIN:-bitvero}
-REGION=${REGION:-ams}           # ams, fra, mil, sao ...
+REGION=${REGION:-nl}
+# Short country codes, any other value is passed as a Vultr region id (ams, fra, mil, sao ...)
+case "$REGION" in nl) REGION=ams ;; br) REGION=sao ;; it) REGION=mil ;; de) REGION=fra ;; esac
 PLAN=${PLAN:-vhp-4c-8gb}        # vhp-2c-4gb up to ~10 people, vhp-4c-8gb up to ~30
 LE_EMAIL=${LE_EMAIL:-letsencrypt@agent.mbotyha.com}
 SSH_KEY_FILE=${SSH_KEY_FILE:-$HOME/.ssh/id_rsa.pub}
@@ -58,7 +87,15 @@ EOF
   until ip=$(vultr "/instances/$id" | jq -r '.instance.main_ip // empty') && is_ipv4 "$ip"; do sleep 5; done
   rec=$(jq -n --arg n "$SUBDOMAIN" --arg ip "$ip" '{type:"A", name:$n, content:$ip, ttl:60, proxied:false, comment:"ephemeral Jitsi on Vultr"}')
   if [ -n "${d:-}" ]; then cf "/zones/$z/dns_records/$d" -X PUT -d "$rec" >/dev/null; else cf "/zones/$z/dns_records" -X POST -d "$rec" >/dev/null; fi
-  echo "$FQDN -> $ip. Jitsi installs by itself; host password: ssh root@$ip cat /root/jitsi-host-pass"
+  room=$(tr '[:upper:]' '[:lower:]' <<<"$NAME" | sed -E 's/[^a-z0-9]+/-/g; s/^-|-$//g')
+  echo "$FQDN -> $ip. Jitsi installs by itself in ~5 min; host password: ssh root@$ip cat /root/jitsi-host-pass"
+  echo "Link: https://$FQDN/$room"
+  if [ -n "$DURATION" ]; then
+    # ponytail: user timer on this PC, it fires only if the PC is on; a Cloudflare Worker cron when that is not enough
+    systemd-run --user --unit="jitsi-destroy-$SUBDOMAIN" --on-active="$DURATION" --timer-property=AccuracySec=1min \
+      "$SELF" destroy --url "https://$FQDN" >/dev/null
+    echo "Destroyed in $DURATION (PC must be on). Cancel: systemctl --user stop jitsi-destroy-$SUBDOMAIN.timer"
+  fi
 }
 
 down() {
@@ -77,4 +114,4 @@ down() {
   else echo "$LABEL destroyed; $FQDN not removed (points at ${cur:-nothing}, not $ip)"; fi
 }
 
-case "${1:-}" in up) up ;; down) down ;; -h|--help) sed -n 2,6p "$0" | sed "s/^# \{0,1\}//" ;; *) echo "usage: $0 up|down" >&2; exit 1 ;; esac
+case "$cmd" in create) up ;; destroy) down ;; esac

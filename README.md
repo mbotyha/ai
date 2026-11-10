@@ -747,26 +747,29 @@ Short-lived servers: created for an event, destroyed after.
 Creates a self-hosted Jitsi Meet server on Vultr and points a Cloudflare DNS record at it, or destroys both. The server installs Jitsi by itself on first boot (cloud-init runs `bin/infra/jitsi-install.sh`): docker-jitsi-meet, Let's Encrypt, hosts log in, guests join without an account once a host is in, lobby on.
 
 ```
-jitsi-vultr up                                  # bitvero.mbotyha.com, Amsterdam, 4 vCPU / 8 GB
-REGION=mil PLAN=vhp-2c-4gb SUBDOMAIN=call jitsi-vultr up
-SNAPSHOT=1 jitsi-vultr down                     # snapshot, destroy, remove the DNS record
+jitsi-vultr create --url https://bitvero.mbotyha.com --name "Foo bar baz" --duration 5h
+PLAN=vhp-2c-4gb jitsi-vultr create --url https://call.mbotyha.com --region br
+SNAPSHOT=1 jitsi-vultr destroy --url https://bitvero.mbotyha.com   # snapshot, destroy, remove the DNS record
 ```
 
 | Flag / env | Required | Value | Description |
 |---|---|---|---|
-| `up` / `down` | yes | — | create or destroy |
-| `VULTR_API_KEY` | yes | key | Vultr: Account → API Access |
-| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on `ZONE` |
-| `ZONE` / `SUBDOMAIN` | no | domain / label | default `mbotyha.com` / `bitvero` |
-| `REGION` | no | Vultr region id | default `ams`; `fra`, `mil`, `sao`, ... |
+| `create` / `destroy` | yes | — | create or destroy (`up` / `down` still work) |
+| `--url` | no | `https://<sub>.<zone>` | server address, default `https://bitvero.mbotyha.com` (same as `SUBDOMAIN` / `ZONE` env) |
+| `--name` | no | text | event name: the printed link is `https://<host>/<name as slug>` (`Foo bar baz` → `/foo-bar-baz`) |
+| `--duration` | no | systemd time span (`5h`, `90min`) | `create` only: destroys the server after that time, through a user systemd timer on this PC (the PC must be on) |
+| `VULTR_API_KEY` | yes | key | Vultr: Account → API Access; env or `~/.config/mbotyha/secrets.env` |
+| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on the zone; env or `~/.config/mbotyha/secrets.env` |
+| `--provider` | no | `vultr` | default and only one for now |
+| `--region` | no | `nl`, `br`, `it`, `de` or a Vultr region id | default `nl` (Amsterdam); `br` São Paulo, `it` Milan, `de` Frankfurt; same as `REGION` env |
 | `PLAN` | no | Vultr plan id | default `vhp-4c-8gb` (~30 people with video); `vhp-2c-4gb` for ~10 |
 | `LE_EMAIL` | no | email | Let's Encrypt notices, default `letsencrypt@agent.mbotyha.com` |
 | `SSH_KEY_FILE` | no | path | public key put on the server, default `~/.ssh/id_rsa.pub` |
-| `SNAPSHOT` | no | `1` | `down` only: snapshot before destroying |
-| `REPLACE_DNS` | no | `1` | `up` only: overwrite an existing A record (refused by default); `down` deletes the record only if it still points at the server |
+| `SNAPSHOT` | no | `1` | `destroy` only: snapshot before destroying |
+| `REPLACE_DNS` | no | `1` | `create` only: overwrite an existing A record (refused by default); `destroy` deletes the record only if it still points at the server |
 | `--help` / `-h` | no | — | print usage and exit |
 
-- The server label is `<SUBDOMAIN>-jitsi`: `up` refuses if it already exists, `down` finds it by label.
+- The server label is `<SUBDOMAIN>-jitsi`: `create` refuses if it already exists, `destroy` finds it by label.
 - The install waits until the DNS record points at the server, then requests the certificate.
 - The host password is generated on the server, root-only: `ssh root@<ip> cat /root/jitsi-host-pass`. Install log: `/root/jitsi-install.log`.
 - Billing runs while the server exists, stopped or not: `down` after the event.

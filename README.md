@@ -739,6 +739,51 @@ translate-text --input "Good morning, how are you?" --output IT
 - Needs `DEEPL_API_KEY` from the shell, else from this repo's `.env` (only that key is read from it). `deepl-node` picks the endpoint from the key: one ending in `:fx` (DeepL API Free) goes to `api-free.deepl.com`, any other to `api.deepl.com`. Quotas depend on the DeepL plan, see your DeepL account.
 - The text is sent to DeepL.
 
+## infra
+
+Short-lived servers: created for an event, destroyed after.
+
+### `jitsi`
+Creates a self-hosted Jitsi Meet server on Vultr and points a Cloudflare DNS record at it, or destroys both. The server installs Jitsi by itself on first boot (cloud-init runs `bin/infra/jitsi-install.sh`): docker-jitsi-meet, Let's Encrypt, hosts log in, guests join without an account once a host is in, lobby on.
+
+```
+jitsi create --url https://bitvero.mbotyha.com --name "Foo bar baz" --duration 5h
+PLAN=vhp-2c-4gb jitsi create --url https://call.mbotyha.com --region br
+SNAPSHOT=1 jitsi destroy --url https://bitvero.mbotyha.com   # snapshot, destroy, remove the DNS record
+```
+
+| Flag / env | Required | Value | Description |
+|---|---|---|---|
+| `create` / `destroy` | yes | — | create or destroy (`up` / `down` still work) |
+| `--url` | no | `https://<sub>.<zone>` | server address, default `https://bitvero.mbotyha.com` (same as `SUBDOMAIN` / `ZONE` env) |
+| `--name` | no | text | event name: the printed link is `https://<host>/<name as slug>` (`Foo bar baz` → `/foo-bar-baz`) |
+| `--duration` | no | `<n>m`, `<n>h`, `<n>d` | `create` only (`90m`, `5h`, `2d`): tags the server `expires=<time>`, the `vm-reaper` Worker destroys server and DNS record when it is up, laptop on or off |
+| `VULTR_API_KEY` | yes | key | Vultr: Account → API Access; env or `~/.config/mbotyha/secrets.env` |
+| `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on the zone; env or `~/.config/mbotyha/secrets.env` |
+| `--provider` | no | `vultr` | default and only one for now |
+| `--region` | no | `nl`, `br`, `it`, `de` or a Vultr region id | default `nl` (Amsterdam); `br` São Paulo, `it` Milan, `de` Frankfurt; same as `REGION` env |
+| `PLAN` | no | Vultr plan id | default `vhp-4c-8gb` (~30 people with video); `vhp-2c-4gb` for ~10 |
+| `LE_EMAIL` | no | email | Let's Encrypt notices, default `letsencrypt@agent.mbotyha.com` |
+| `SSH_KEY_FILE` | no | path | public key put on the server, default `~/.ssh/id_rsa.pub` |
+| `SNAPSHOT` | no | `1` | `destroy` only: snapshot before destroying |
+| `REPLACE_DNS` | no | `1` | `create` only: overwrite an existing A record (refused by default); `destroy` deletes the record only if it still points at the server |
+| `--help` / `-h` | no | — | print usage and exit |
+
+- The server label is `<SUBDOMAIN>-jitsi`: `create` refuses if it already exists, `destroy` finds it by label.
+- The install waits until the DNS record points at the server, then requests the certificate.
+- The host password is generated on the server, root-only: `ssh root@<ip> cat /root/jitsi-host-pass`. Install log: `/root/jitsi-install.log`.
+- Billing runs while the server exists, stopped or not: `destroy` after the event, or `--duration`.
+
+### `vm-reaper` (Worker)
+Cloudflare Worker in `workers/vm-reaper/`, cron every 5 minutes: destroys every Vultr server tagged `expires=<unix seconds>` once that time has passed, after deleting the A record named by its `fqdn=<host>` tag (only while it still points at the server). No storage: the deadline lives on the server. Works with the laptop off.
+
+```
+cd workers/vm-reaper && npx wrangler deploy        # once, and after changes
+npx wrangler secret put VULTR_API_KEY              # Vultr key, API access control open to any IP
+npx wrangler secret put CLOUDFLARE_API_TOKEN       # Zone Read + DNS Edit
+node workers/vm-reaper/check.mjs                   # offline check with a fake API
+```
+
 ## Setup from scratch (to replicate on a VPS)
 
 1. **Node.js + npm** (via nvm, recommended):
@@ -902,6 +947,7 @@ ai-cli/
 │   ├── social/                     # instagram-*, tiktok-*, x-* downloaders
 │   ├── media/                      # image conversion, upscale, watermarks, video frames/blur/overlay/aspect ratio, slideshow
 │   ├── dev/                        # ai-resume, gitchat, gitpush, gitpool-landed, github-events, workspace-check, repo-split-branches, repo-join-branches, search-string, fixvscode, wsname
+│   ├── infra/                      # jitsi (+ jitsi-install.sh, run on the server by cloud-init)
 │   └── utils/                      # share-qr, translate-text
 ├── workers/github-events/          # Cloudflare Worker behind github-events
 ├── .claude/skills/ffmpeg-skill/    # vendored third-party skill (MIT), see "media"

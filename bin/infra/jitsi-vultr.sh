@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ephemeral Jitsi on Vultr, one command each way.
 #   jitsi-vultr create [--url https://bitvero.mbotyha.com] [--name "Foo bar"] [--duration 5h] [--provider vultr] [--region nl]
-#       server + DNS, Jitsi installs itself via cloud-init (~5 min); --duration destroys it after that time
+#       server + DNS, Jitsi installs itself via cloud-init (~5 min); --duration: the vm-reaper Worker destroys it after that time
 #   jitsi-vultr destroy [--url ...]   snapshot (optional, SNAPSHOT=1), destroy server, remove DNS
 # Keys: VULTR_API_KEY, CLOUDFLARE_API_TOKEN (Zone Read + DNS Edit) from env or ~/.config/mbotyha/secrets.env
 # Other defaults from env, e.g. REGION=mil PLAN=vhp-2c-4gb jitsi-vultr create
@@ -64,6 +64,15 @@ up() {
   # Check DNS before paying for a server
   z=$(zone_id); read -r d old < <(dns_rec "$z") || true
   [ -z "${d:-}" ] || [ "${REPLACE_DNS:-0}" = 1 ] || { echo "$FQDN already points at $old; REPLACE_DNS=1 to overwrite" >&2; exit 1; }
+  tags='["jitsi"]'
+  if [ -n "$DURATION" ]; then
+    [[ $DURATION =~ ^([0-9]+)(m|min|h|d)$ ]] || { echo "--duration: use e.g. 90m, 5h, 2d" >&2; exit 1; }
+    case ${BASH_REMATCH[2]} in m|min) unit=60 ;; h) unit=3600 ;; d) unit=86400 ;; esac
+    secs=$(( BASH_REMATCH[1] * unit ))
+    expires=$(( $(date +%s) + secs ))
+    # read by the vm-reaper Worker (ai repo, workers/vm-reaper), which destroys server + DNS when the time is up
+    tags=$(jq -nc --arg e "expires=$expires" --arg f "fqdn=$FQDN" '["jitsi", $e, $f]')
+  fi
   os_id=$(vultr /os | jq -r '.os[] | select(.name=="Ubuntu 24.04 LTS x64") | .id')
   # cloud-init: SSH key, install script, run it once DNS resolves to this server
   # ponytail: no deadline on the DNS wait, check /root/jitsi-install.log if it never starts
@@ -80,8 +89,8 @@ runcmd:
   - [bash, -c, "until ip=\$(curl -fsS https://api.ipify.org) && getent ahostsv4 $FQDN | awk '{print \$1}' | grep -qxF \"\$ip\"; do sleep 10; done; DOMAIN=$FQDN LE_EMAIL=$LE_EMAIL /root/jitsi-install.sh > /root/jitsi-install.log 2>&1"]
 EOF
 )
-  body=$(jq -n --arg r "$REGION" --arg p "$PLAN" --argjson o "$os_id" --arg l "$LABEL" --arg h "$SUBDOMAIN" --arg u "$(base64 -w0 <<<"$user_data")" \
-    '{region:$r, plan:$p, os_id:$o, label:$l, hostname:$h, user_data:$u, backups:"disabled", enable_ipv6:false}')
+  body=$(jq -n --arg r "$REGION" --arg p "$PLAN" --argjson o "$os_id" --arg l "$LABEL" --arg h "$SUBDOMAIN" --arg u "$(base64 -w0 <<<"$user_data")" --argjson t "$tags" \
+    '{region:$r, plan:$p, os_id:$o, label:$l, hostname:$h, user_data:$u, tags:$t, backups:"disabled", enable_ipv6:false}')
   id=$(vultr /instances -X POST -d "$body" | jq -r .instance.id)
   echo "instance $id: waiting for IP (if this fails, the server exists: jitsi-vultr down)"
   until ip=$(vultr "/instances/$id" | jq -r '.instance.main_ip // empty') && is_ipv4 "$ip"; do sleep 5; done
@@ -90,12 +99,7 @@ EOF
   room=$(tr '[:upper:]' '[:lower:]' <<<"$NAME" | sed -E 's/[^a-z0-9]+/-/g; s/^-|-$//g')
   echo "$FQDN -> $ip. Jitsi installs by itself in ~5 min; host password: ssh root@$ip cat /root/jitsi-host-pass"
   echo "Link: https://$FQDN/$room"
-  if [ -n "$DURATION" ]; then
-    # ponytail: user timer on this PC, it fires only if the PC is on; a Cloudflare Worker cron when that is not enough
-    systemd-run --user --unit="jitsi-destroy-$SUBDOMAIN" --on-active="$DURATION" --timer-property=AccuracySec=1min \
-      "$SELF" destroy --url "https://$FQDN" >/dev/null
-    echo "Destroyed in $DURATION (PC must be on). Cancel: systemctl --user stop jitsi-destroy-$SUBDOMAIN.timer"
-  fi
+  [ -z "$DURATION" ] || echo "Destroyed by the vm-reaper Worker at $(date -d "@$expires" '+%F %H:%M') (laptop can be off)"
 }
 
 down() {

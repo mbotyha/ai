@@ -757,7 +757,7 @@ SNAPSHOT=1 jitsi-vultr destroy --url https://bitvero.mbotyha.com   # snapshot, d
 | `create` / `destroy` | yes | — | create or destroy (`up` / `down` still work) |
 | `--url` | no | `https://<sub>.<zone>` | server address, default `https://bitvero.mbotyha.com` (same as `SUBDOMAIN` / `ZONE` env) |
 | `--name` | no | text | event name: the printed link is `https://<host>/<name as slug>` (`Foo bar baz` → `/foo-bar-baz`) |
-| `--duration` | no | systemd time span (`5h`, `90min`) | `create` only: destroys the server after that time, through a user systemd timer on this PC (the PC must be on) |
+| `--duration` | no | `<n>m`, `<n>h`, `<n>d` | `create` only (`90m`, `5h`, `2d`): tags the server `expires=<time>`, the `vm-reaper` Worker destroys server and DNS record when it is up, laptop on or off |
 | `VULTR_API_KEY` | yes | key | Vultr: Account → API Access; env or `~/.config/mbotyha/secrets.env` |
 | `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on the zone; env or `~/.config/mbotyha/secrets.env` |
 | `--provider` | no | `vultr` | default and only one for now |
@@ -772,7 +772,17 @@ SNAPSHOT=1 jitsi-vultr destroy --url https://bitvero.mbotyha.com   # snapshot, d
 - The server label is `<SUBDOMAIN>-jitsi`: `create` refuses if it already exists, `destroy` finds it by label.
 - The install waits until the DNS record points at the server, then requests the certificate.
 - The host password is generated on the server, root-only: `ssh root@<ip> cat /root/jitsi-host-pass`. Install log: `/root/jitsi-install.log`.
-- Billing runs while the server exists, stopped or not: `down` after the event.
+- Billing runs while the server exists, stopped or not: `destroy` after the event, or `--duration`.
+
+### `vm-reaper` (Worker)
+Cloudflare Worker in `workers/vm-reaper/`, cron every 5 minutes: destroys every Vultr server tagged `expires=<unix seconds>` once that time has passed, after deleting the A record named by its `fqdn=<host>` tag (only while it still points at the server). No storage: the deadline lives on the server. Works with the laptop off.
+
+```
+cd workers/vm-reaper && npx wrangler deploy        # once, and after changes
+npx wrangler secret put VULTR_API_KEY              # Vultr key, API access control open to any IP
+npx wrangler secret put CLOUDFLARE_API_TOKEN       # Zone Read + DNS Edit
+node workers/vm-reaper/check.mjs                   # offline check with a fake API
+```
 
 ## Setup from scratch (to replicate on a VPS)
 

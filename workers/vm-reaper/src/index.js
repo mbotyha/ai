@@ -33,10 +33,15 @@ export const reap = async (env, now = Date.now() / 1000) => {
     const expires = Number(tag(inst, 'expires'))
     if (!expires || expires > now) continue
     const fqdn = tag(inst, 'fqdn')
-    // DNS first: the record must never outlive the IP, which Vultr hands to someone else
-    if (fqdn) await dropDns(cf, fqdn, inst.main_ip)
-    await vultr(`/instances/${inst.id}`, { method: 'DELETE' })
-    reaped.push(`${inst.label} ${inst.main_ip}${fqdn ? ` ${fqdn}` : ''}`)
+    // one failing server must not keep the others billing: report it and go on
+    try {
+      // DNS first: the record must never outlive the IP, which Vultr hands to someone else
+      if (fqdn) await dropDns(cf, fqdn, inst.main_ip)
+      await vultr(`/instances/${inst.id}`, { method: 'DELETE' })
+      reaped.push(`${inst.label} ${inst.main_ip}${fqdn ? ` ${fqdn}` : ''}`)
+    } catch (err) {
+      console.error('reap failed', inst.label, err.message)
+    }
   }
   return reaped
 }

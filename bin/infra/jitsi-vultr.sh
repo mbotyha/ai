@@ -29,7 +29,11 @@ done
 
 SECRETS=${SECRETS:-$HOME/.config/mbotyha/secrets.env}
 # shellcheck disable=SC1090
-[ -n "${VULTR_API_KEY:-}" ] || [ ! -f "$SECRETS" ] || . "$SECRETS"
+# Each key: environment first, then the file
+if { [ -z "${VULTR_API_KEY:-}" ] || [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; } && [ -f "$SECRETS" ]; then
+  v=${VULTR_API_KEY:-} c=${CLOUDFLARE_API_TOKEN:-}; . "$SECRETS"
+  VULTR_API_KEY=${v:-${VULTR_API_KEY:-}} CLOUDFLARE_API_TOKEN=${c:-${CLOUDFLARE_API_TOKEN:-}}
+fi
 : "${VULTR_API_KEY:?missing, set it or put it in $SECRETS}" "${CLOUDFLARE_API_TOKEN:?missing, set it or put it in $SECRETS}"
 
 # --url https://sub.zone.tld wins over SUBDOMAIN/ZONE
@@ -68,7 +72,7 @@ up() {
   if [ -n "$DURATION" ]; then
     [[ $DURATION =~ ^([0-9]+)(m|min|h|d)$ ]] || { echo "--duration: use e.g. 90m, 5h, 2d" >&2; exit 1; }
     case ${BASH_REMATCH[2]} in m|min) unit=60 ;; h) unit=3600 ;; d) unit=86400 ;; esac
-    secs=$(( BASH_REMATCH[1] * unit ))
+    secs=$(( 10#${BASH_REMATCH[1]} * unit ))
     expires=$(( $(date +%s) + secs ))
     # read by the vm-reaper Worker (ai repo, workers/vm-reaper), which destroys server + DNS when the time is up
     tags=$(jq -nc --arg e "expires=$expires" --arg f "fqdn=$FQDN" '["jitsi", $e, $f]')

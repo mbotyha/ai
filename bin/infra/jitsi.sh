@@ -65,6 +65,8 @@ is_ipv4() { [[ $1 =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ && $1 != 0.0.0.0 ]]; }
 # Monthly price of plan $1 in region $2 (regional price when Vultr lists one), empty if not sold there
 monthly() { vultr "/plans?per_page=500" | jq -r --arg p "$1" --arg r "$2" '.plans[] | select(.id == $p and (.locations | index($r))) | .location_cost[$r].monthly_cost // .monthly_cost'; }
 # Vultr bills monthly/672 per started hour, capped at the monthly price (matches the 2026-11 bitvero bill: 35 h x 48/672 = 2.50 USD)
+# ponytail: one cap for the whole run and plans page 1 only (500 of ~140); a server living across a calendar
+# month change is underestimated (cap per month and sum), a plan past page 500 is refused (follow meta.links.next)
 # $1 monthly price, $2 seconds -> "<hours> <USD/h> <total USD>"
 cost() { awk -v m="$1" -v s="$2" 'BEGIN { h = int((s + 3599) / 3600); r = m / 672; t = h * r; if (t > m) t = m; printf "%d %.4f %.2f", h, r, t }'; }
 

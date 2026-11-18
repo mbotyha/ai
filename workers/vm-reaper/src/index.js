@@ -12,6 +12,7 @@ const call = (base, token) => async (path, init = {}) => {
 const tag = (inst, key) => inst.tags?.find(t => t.startsWith(`${key}=`))?.slice(key.length + 1)
 
 // Same rule as jitsi.sh cost(): monthly/672 per started hour, capped at the monthly price
+// ponytail: same ceilings as jitsi.sh (one cap for the whole run, plans page 1), fine for servers that live hours
 const cost = (plans, inst, now) => {
   const p = plans.find(x => x.id === inst.plan)
   const monthly = p?.location_cost?.[inst.region]?.monthly_cost ?? p?.monthly_cost

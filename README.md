@@ -748,7 +748,7 @@ Creates a self-hosted Jitsi Meet server on Vultr and points a Cloudflare DNS rec
 
 ```
 jitsi create --url https://bitvero.mbotyha.com --name "Foo bar baz" --duration 5h
-PLAN=vhp-2c-4gb jitsi create --url https://call.mbotyha.com --region br
+PLAN=vhp-2c-4gb-amd jitsi create --url https://call.mbotyha.com --region br
 SNAPSHOT=1 jitsi destroy --url https://bitvero.mbotyha.com   # snapshot, destroy, remove the DNS record
 ```
 
@@ -762,12 +762,14 @@ SNAPSHOT=1 jitsi destroy --url https://bitvero.mbotyha.com   # snapshot, destroy
 | `CLOUDFLARE_API_TOKEN` | yes | token | Cloudflare token with Zone Read + DNS Edit on the zone; env or `~/.config/mbotyha/secrets.env` |
 | `--provider` | no | `vultr` | default and only one for now |
 | `--region` | no | `nl`, `br`, `it`, `de` or a Vultr region id | default `nl` (Amsterdam); `br` São Paulo, `it` Milan, `de` Frankfurt; same as `REGION` env |
-| `PLAN` | no | Vultr plan id | default `vhp-4c-8gb` (~30 people with video); `vhp-2c-4gb` for ~10 |
+| `PLAN` | no | Vultr plan id | default `vhp-4c-8gb-amd` (~30 people with video); `vhp-2c-4gb-amd` for ~10; refused before paying if not sold in the region |
 | `LE_EMAIL` | no | email | Let's Encrypt notices, default `letsencrypt@agent.mbotyha.com` |
 | `SSH_KEY_FILE` | no | path | public key put on the server, default `~/.ssh/id_rsa.pub` |
 | `SNAPSHOT` | no | `1` | `destroy` only: snapshot before destroying |
 | `REPLACE_DNS` | no | `1` | `create` only: overwrite an existing A record (refused by default); `destroy` deletes the record only if it still points at the server |
 | `--help` / `-h` | no | — | print usage and exit |
+
+Cost: `create` prints the hourly price of plan + region from the Vultr API and, with `--duration`, the estimate; `destroy` and the `vm-reaper` log print hours and total. Vultr bills monthly price / 672 per started hour, capped at the monthly price (48 USD/month → 0.0714 USD/h; São Paulo costs more). The exact figure is in Vultr Billing.
 
 - The server label is `<SUBDOMAIN>-jitsi`: `create` refuses if it already exists, `destroy` finds it by label.
 - The install waits until the DNS record points at the server, then requests the certificate.

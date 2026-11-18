@@ -43,7 +43,7 @@ SUBDOMAIN=${SUBDOMAIN:-bitvero}
 REGION=${REGION:-nl}
 # Short country codes, any other value is passed as a Vultr region id (ams, fra, mil, sao ...)
 case "$REGION" in nl) REGION=ams ;; br) REGION=sao ;; it) REGION=mil ;; de) REGION=fra ;; esac
-PLAN=${PLAN:-vhp-4c-8gb}        # vhp-2c-4gb up to ~10 people, vhp-4c-8gb up to ~30
+PLAN=${PLAN:-vhp-4c-8gb-amd}    # vhp-2c-4gb-amd up to ~10 people, vhp-4c-8gb-amd up to ~30
 LE_EMAIL=${LE_EMAIL:-letsencrypt@agent.mbotyha.com}
 SSH_KEY_FILE=${SSH_KEY_FILE:-$HOME/.ssh/id_rsa.pub}
 INSTALL=${INSTALL:-$(dirname "$(readlink -f "$0")")/jitsi-install.sh}
@@ -62,6 +62,11 @@ instance_id() {
 }
 dns_rec() { cf "/zones/$1/dns_records?type=A&name=$FQDN" | jq -r '.result[0] // empty | "\(.id) \(.content)"'; }
 is_ipv4() { [[ $1 =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ && $1 != 0.0.0.0 ]]; }
+# Monthly price of plan $1 in region $2 (regional price when Vultr lists one), empty if not sold there
+monthly() { vultr "/plans?per_page=500" | jq -r --arg p "$1" --arg r "$2" '.plans[] | select(.id == $p and (.locations | index($r))) | .location_cost[$r].monthly_cost // .monthly_cost'; }
+# Vultr bills monthly/672 per started hour, capped at the monthly price (matches the 2026-11 bitvero bill: 35 h x 48/672 = 2.50 USD)
+# $1 monthly price, $2 seconds -> "<hours> <USD/h> <total USD>"
+cost() { awk -v m="$1" -v s="$2" 'BEGIN { h = int((s + 3599) / 3600); r = m / 672; t = h * r; if (t > m) t = m; printf "%d %.4f %.2f", h, r, t }'; }
 
 up() {
   [ -z "$(instance_id)" ] || { echo "$LABEL already exists" >&2; exit 1; }
@@ -77,6 +82,11 @@ up() {
     # read by the vm-reaper Worker (ai repo, workers/vm-reaper), which destroys server + DNS when the time is up
     tags=$(jq -nc --arg e "expires=$expires" --arg f "fqdn=$FQDN" '["jitsi", $e, $f]')
   fi
+  m=$(monthly "$PLAN" "$REGION")
+  [ -n "$m" ] || { echo "plan $PLAN not sold in $REGION (list: curl https://api.vultr.com/v2/plans)" >&2; exit 1; }
+  read -r _ rate _ < <(cost "$m" 3600)
+  echo "price: $rate USD/h ($PLAN, $REGION), cap $m USD/month"
+  [ -z "$DURATION" ] || { read -r h _ t < <(cost "$m" "$secs"); echo "estimate: $h h = $t USD"; }
   os_id=$(vultr /os | jq -r '.os[] | select(.name=="Ubuntu 24.04 LTS x64") | .id')
   # cloud-init: SSH key, install script, run it once DNS resolves to this server
   # ponytail: no deadline on the DNS wait, check /root/jitsi-install.log if it never starts
@@ -108,7 +118,7 @@ EOF
 
 down() {
   id=$(instance_id); [ -n "$id" ] || { echo "no $LABEL instance" >&2; exit 1; }
-  ip=$(vultr "/instances/$id" | jq -r .instance.main_ip)
+  read -r ip plan region created < <(vultr "/instances/$id" | jq -r '.instance | "\(.main_ip) \(.plan) \(.region) \(.date_created)"')
   z=$(zone_id)   # before destroying, so a bad token stops here
   if [ "${SNAPSHOT:-0}" = 1 ]; then
     snap=$(vultr /snapshots -X POST -d "$(jq -n --arg i "$id" --arg d "$LABEL $(date +%F)" '{instance_id:$i, description:$d}')" | jq -r .snapshot.id)
@@ -120,6 +130,10 @@ down() {
   read -r d cur < <(dns_rec "$z") || true
   if [ -n "${d:-}" ] && [ "$cur" = "$ip" ]; then cf "/zones/$z/dns_records/$d" -X DELETE >/dev/null; echo "$LABEL destroyed, $FQDN removed"
   else echo "$LABEL destroyed; $FQDN not removed (points at ${cur:-nothing}, not $ip)"; fi
+  m=$(monthly "$plan" "$region" || true)   # server already gone: a failed lookup only skips the cost line
+  if [ -n "$m" ]; then read -r h rate t < <(cost "$m" $(( $(date +%s) - $(date -d "$created" +%s) )))
+    echo "cost: $h h x $rate USD/h = $t USD ($plan, $region, since $created); exact figure: Vultr Billing"
+  fi
 }
 
 case "$cmd" in create) up ;; destroy) down ;; esac

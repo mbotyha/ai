@@ -11,6 +11,16 @@ const call = (base, token) => async (path, init = {}) => {
 
 const tag = (inst, key) => inst.tags?.find(t => t.startsWith(`${key}=`))?.slice(key.length + 1)
 
+// Same rule as jitsi.sh cost(): monthly/672 per started hour, capped at the monthly price
+// ponytail: same ceilings as jitsi.sh (one cap for the whole run, plans page 1), fine for servers that live hours
+const cost = (plans, inst, now) => {
+  const p = plans.find(x => x.id === inst.plan)
+  const monthly = p?.location_cost?.[inst.region]?.monthly_cost ?? p?.monthly_cost
+  if (!monthly) return ''
+  const hours = Math.ceil((now - Date.parse(inst.date_created) / 1000) / 3600)
+  return ` ${hours}h ${Math.min(hours * monthly / 672, monthly).toFixed(2)}USD`
+}
+
 // Deletes the A record only while it still points at this server
 const dropDns = async (cf, fqdn, ip) => {
   const parts = fqdn.split('.')
@@ -29,16 +39,17 @@ export const reap = async (env, now = Date.now() / 1000) => {
   // ponytail: first 500 instances, cursor pagination if the account ever gets past that
   const { instances } = await vultr('/instances?per_page=500')
   const reaped = []
-  for (const inst of instances) {
-    const expires = Number(tag(inst, 'expires'))
-    if (!expires || expires > now) continue
+  const expired = instances.filter(inst => Number(tag(inst, 'expires')) && Number(tag(inst, 'expires')) <= now)
+  // prices only for the log line: a failed lookup must not stop the destroy
+  const plans = expired.length ? (await vultr('/plans?per_page=500').catch(() => ({}))).plans || [] : []
+  for (const inst of expired) {
     const fqdn = tag(inst, 'fqdn')
     // one failing server must not keep the others billing: report it and go on
     try {
       // DNS first: the record must never outlive the IP, which Vultr hands to someone else
       if (fqdn) await dropDns(cf, fqdn, inst.main_ip)
       await vultr(`/instances/${inst.id}`, { method: 'DELETE' })
-      reaped.push(`${inst.label} ${inst.main_ip}${fqdn ? ` ${fqdn}` : ''}`)
+      reaped.push(`${inst.label} ${inst.main_ip}${fqdn ? ` ${fqdn}` : ''}${cost(plans, inst, now)}`)
     } catch (err) {
       console.error('reap failed', inst.label, err.message)
     }

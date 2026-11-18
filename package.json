@@ -46,6 +46,7 @@
     "repo-split-branches": "./bin/dev/repo-split-branches.sh",
     "search-string": "./bin/dev/search-string.js",
     "wsname": "./bin/dev/wsname.sh",
+    "jitsi": "./bin/infra/jitsi.sh",
     "share-qr": "./bin/utils/share-qr.js",
     "translate-text": "./bin/utils/translate-text.js"
   },
